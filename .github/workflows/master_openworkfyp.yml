@@ -23,12 +23,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build application (if present)
         run: npm run build --if-present
-
-      # ❌ REMOVED: npm test (this was breaking deployment)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
