@@ -1,0 +1,12 @@
+const express = require('express');
+const r = express.Router();
+const { protect } = require('../middleware/auth');
+const { getOrCreateConversation, getConversations, getMessages, sendMessage, getUnreadCount, openConversation, markMessagesAsRead } = require('../controllers/messageController');
+r.post('/conversations', protect, getOrCreateConversation);
+r.get('/conversations', protect, getConversations);
+r.get('/conversations/:conversationId', protect, openConversation);
+r.get('/conversations/:conversationId/messages', protect, getMessages);
+r.post('/conversations/:conversationId/messages', protect, sendMessage);
+r.post('/messages/mark-read', protect, markMessagesAsRead);
+r.get('/unread-count', protect, getUnreadCount);
+module.exports = r;

@@ -1,0 +1,11 @@
+const express = require('express');
+const r = express.Router();
+const { protect, optionalAuth } = require('../middleware/auth');
+const { createOffer, getOffers, getOffer, updateOffer, deleteOffer, getMyOffers } = require('../controllers/offerController');
+r.get('/', optionalAuth, getOffers);
+r.post('/', protect, createOffer);
+r.get('/my', protect, getMyOffers);
+r.get('/:id', optionalAuth, getOffer);
+r.put('/:id', protect, updateOffer);
+r.delete('/:id', protect, deleteOffer);
+module.exports = r;
