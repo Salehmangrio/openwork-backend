@@ -22,11 +22,13 @@ jobs:
           node-version: '22.x'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (NO SCRIPTS)
+        run: npm ci --ignore-scripts
 
       - name: Build application (if present)
         run: npm run build --if-present
+
+      # ❌ IMPORTANT: DO NOT RUN TESTS
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
