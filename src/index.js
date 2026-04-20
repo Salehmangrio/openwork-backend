@@ -81,8 +81,10 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── CORS ────────────────────────────────────────────────────
 app.use(cors({
-  origin: "https://openworkfyp.netlify.app"||"*",
-  credentials: true
+  origin: "https://openworkfyp.netlify.app",
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // Stripe webhook must receive raw body for signature verification.
