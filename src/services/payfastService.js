@@ -410,34 +410,63 @@ exports.confirmTopupFromReturn = async (paymentId, userId) => {
             return { success: false, message: `Payment status is ${payment.status}` };
         }
 
-        // Verify with PayFast that this payment actually completed
-        const verifyData = {
-            merchant_id: String(CONFIG.merchantId).trim(),
-            merchant_key: String(CONFIG.merchantKey).trim(),
-            m_payment_id: String(paymentId),
-        };
-        verifyData.signature = generateSignature(verifyData);
+        // In development/sandbox, trust the return URL redirect since user completed PayFast's process
+        // In production, validate with PayFast to prevent fraud
+        const nodeEnv = (process.env.NODE_ENV || 'development').trim().toLowerCase();
+        const isProduction = nodeEnv === 'production';
 
-        let pfValid = false;
-        try {
-            const response = await axios.post(
-                CONFIG.validateUrl,
-                new URLSearchParams(verifyData).toString(),
-                { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-            );
-            pfValid = response.data === 'VALID';
-            console.log(`PayFast confirm validation: ${response.data}`);
-        } catch (e) {
-            console.warn('PayFast validate call failed:', e.message);
-            // In sandbox, validation endpoint may be unreliable — treat as valid
-            // ONLY if NODE_ENV is not production
-            pfValid = process.env.NODE_ENV !== 'production';
+        console.log(`\n🔍 TOPUP CONFIRM - Environment Check`);
+        console.log(`   NODE_ENV raw: "${process.env.NODE_ENV}"`);
+        console.log(`   NODE_ENV trimmed: "${nodeEnv}"`);
+        console.log(`   Is Production: ${isProduction}`);
+
+        let isValid = false;
+
+        if (!isProduction) {
+            // Development/Sandbox: Trust the redirect
+            console.log('🏖️  SANDBOX MODE: Trusting return URL redirect (skipping PayFast validation)');
+            isValid = true;
+        } else {
+            // Production: Validate with PayFast
+            console.log('🔒 PRODUCTION MODE: Validating with PayFast...');
+
+            const verifyData = {
+                merchant_id: String(CONFIG.merchantId).trim(),
+                merchant_key: String(CONFIG.merchantKey).trim(),
+                m_payment_id: String(paymentId),
+            };
+            verifyData.signature = generateSignature(verifyData);
+
+            try {
+                console.log('📤 Sending validation request to PayFast...');
+                const response = await axios.post(
+                    CONFIG.validateUrl,
+                    new URLSearchParams(verifyData).toString(),
+                    {
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        timeout: 5000
+                    }
+                );
+                console.log('📥 PayFast response:', response.status, response.data);
+                isValid = response.data === 'VALID';
+                console.log(`✅ PayFast validation: ${response.data}`);
+            } catch (e) {
+                console.error('❌ PayFast validation error:', {
+                    message: e.message,
+                    status: e.response?.status,
+                    data: e.response?.data
+                });
+                isValid = false;
+            }
         }
 
-        if (!pfValid) {
+        if (!isValid) {
             await session.abortTransaction();
+            console.error('❌ Payment validation failed - rejecting');
             return { success: false, message: 'PayFast could not confirm payment' };
         }
+
+        console.log(`✅ Payment validation passed\n`);
 
         // Credit the wallet
         payment.status = 'released';
