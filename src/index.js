@@ -40,20 +40,20 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use((req, res, next) => {
   const originalJson = res.json;
   const originalSend = res.send;
-  
+
   // Don't add COOP header to JSON API responses
-  res.json = function(data) {
+  res.json = function (data) {
     return originalJson.call(this, data);
   };
-  
+
   // Add COOP header for HTML responses only
-  res.send = function(data) {
+  res.send = function (data) {
     if (typeof data === 'string' && (data.includes('<!DOCTYPE') || data.includes('<html'))) {
       res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
     }
     return originalSend.call(this, data);
   };
-  
+
   next();
 });
 
@@ -81,10 +81,8 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── CORS ────────────────────────────────────────────────────
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000', process.env.CLIENT_URL || '*'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: "https://openworkfyp.netlify.app"||"*",
+  credentials: true
 }));
 
 // Stripe webhook must receive raw body for signature verification.
