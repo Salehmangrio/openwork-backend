@@ -4,7 +4,7 @@
  */
 
 const userService = require('../services/userService');
-const { User } = require('../models/index');
+const { User, Conversation } = require('../models/index');
 const { cloudinary } = require('../middleware/upload');
 
 exports.getUser = async (req, res, next) => {
@@ -57,6 +57,91 @@ exports.getClients = async (req, res, next) => {
       users
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+exports.getConversationClients = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const search = req.query.search || '';
+    const limit = parseInt(req.query.limit) || 100;
+
+    console.log(`🔍 [getConversationClients] Fetching all message participants for user: ${userId}`);
+
+    // Get the Message model
+    const Message = require('../models/index').Message;
+
+    // Find all conversations where current user is involved
+    const conversations = await Conversation.find({ participants: userId }).populate('participants', '_id');
+    const conversationIds = conversations.map(c => c._id);
+
+    console.log(`📋 [getConversationClients] Found ${conversationIds.length} conversations`);
+    console.log(`🔗 [getConversationClients] Conversation IDs:`, conversationIds);
+
+    if (conversationIds.length === 0) {
+      console.log(`⚠️ [getConversationClients] No conversations found`);
+      return res.json({ success: true, users: [] });
+    }
+
+    // Extract all unique participants from conversations (everyone in those conversations except current user)
+    const clientIds = new Set();
+    
+    conversations.forEach(conv => {
+      console.log(`📌 [getConversationClients] Processing conversation with participants:`, conv.participants);
+      conv.participants?.forEach(participant => {
+        const participantId = participant._id?.toString();
+        if (participantId && participantId !== userId.toString()) {
+          clientIds.add(participantId);
+          console.log(`➕ [getConversationClients] Added participant: ${participantId}`);
+        }
+      });
+    });
+
+    // Also get all unique message senders from these conversations
+    const messages = await Message.find({ conversation: { $in: conversationIds } });
+    console.log(`💬 [getConversationClients] Found ${messages.length} total messages`);
+
+    messages.forEach(msg => {
+      const senderId = msg.sender.toString();
+      if (senderId !== userId.toString()) {
+        clientIds.add(senderId);
+        console.log(`💬 [getConversationClients] Added message sender: ${senderId}`);
+      }
+    });
+
+    const clientIdArray = Array.from(clientIds);
+    console.log(`👥 [getConversationClients] Total unique people found: ${clientIdArray.length}`, clientIdArray);
+
+    if (clientIdArray.length === 0) {
+      console.log(`⚠️ [getConversationClients] No clients found`);
+      return res.json({ success: true, users: [] });
+    }
+
+    // Build query - get all these users, no role filter
+    const query = { _id: { $in: clientIdArray } };
+    if (search) {
+      query.$or = [
+        { fullName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    console.log(`🔎 [getConversationClients] Querying users with IDs:`, clientIdArray);
+
+    const users = await User.find(query)
+      .select('_id fullName email profileImage role')
+      .limit(limit);
+
+    console.log(`✅ [getConversationClients] Found ${users.length} matching users:`, users);
+
+    res.json({
+      success: true,
+      users,
+      total: users.length
+    });
+  } catch (err) {
+    console.error('❌ [getConversationClients] Error:', err.message, err.stack);
     next(err);
   }
 };

@@ -126,7 +126,7 @@ exports.getMessages = async (req, res, next) => {
 
 /**
  * Send a new message
- * Analyzes content for safety and marks as delivered when sent
+ * Saves message immediately with pending status, analyzes in parallel
  */
 exports.sendMessage = async (req, res, next) => {
   try {
@@ -134,19 +134,17 @@ exports.sendMessage = async (req, res, next) => {
     const conv = await Conversation.findById(req.params.conversationId);
     if (!conv) return res.status(404).json({ success: false, message: 'Conversation not found' });
 
-    // Analyze message content using AI service
-    const analysis = await analyzeMessageContent(content);
-
+    // Create message with PENDING status (doesn't block on AI)
     const message = await Message.create({
       conversation: conv._id,
       sender: req.user._id,
       content,
       messageType,
       attachments: attachments || [],
-      deliveredAt: new Date(), // Mark as delivered when sent
-      contentStatus: analysis.status,
-      contentScore: analysis.score,
-      flaggedAt: analysis.status === 'unsafe' ? new Date() : null
+      deliveredAt: new Date(),
+      contentStatus: 'pending', // Immediately mark as pending
+      contentScore: 0,
+      flaggedAt: null
     });
 
     conv.lastMessage = message._id;
@@ -155,7 +153,7 @@ exports.sendMessage = async (req, res, next) => {
 
     await message.populate('sender', 'fullName profileImage');
 
-    // Emit socket event
+    // Emit socket event with message (pending status)
     const io = req.app.get('io');
     io.to(`chat:${conv._id}`).emit('chat:message', message);
 
@@ -169,7 +167,46 @@ exports.sendMessage = async (req, res, next) => {
       });
     }
 
+    // Send response immediately (don't wait for AI analysis)
     res.status(201).json({ success: true, message });
+
+    // === PARALLEL ANALYSIS (non-blocking) ===
+    // Analyze in background and update message status
+    analyzeMessageContent(content)
+      .then(async (analysis) => {
+        try {
+          console.log(`🔍 Analyzing message ${message._id}...`);
+          console.log(`   Content: "${content.substring(0, 50)}..."`);
+          console.log(`   AI Result: ${analysis.status} (score: ${analysis.score})`);
+
+          // Update message with analysis results
+          const updatedMessage = await Message.findByIdAndUpdate(
+            message._id,
+            {
+              contentStatus: analysis.status,
+              contentScore: analysis.score,
+              flaggedAt: analysis.status === 'unsafe' ? new Date() : null
+            },
+            { new: true }
+          ).populate('sender', 'fullName profileImage');
+
+          // Emit status update via socket (so client sees the change)
+          io.to(`chat:${conv._id}`).emit('message:status-update', {
+            messageId: message._id,
+            contentStatus: analysis.status,
+            contentScore: analysis.score,
+            flaggedAt: updatedMessage.flaggedAt
+          });
+
+          console.log(`✅ Message ${message._id} analyzed: ${analysis.status} (score: ${analysis.score})`);
+        } catch (error) {
+          console.error(`❌ Error updating message status for ${message._id}:`, error.message);
+        }
+      })
+      .catch(error => {
+        console.error(`❌ Message analysis failed for ${message._id}:`, error.message);
+      });
+
   } catch (err) {
     next(err);
   }
