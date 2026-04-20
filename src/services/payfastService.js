@@ -350,6 +350,7 @@ exports.validateTopupAmount = (amount) => {
 };
 
 // ================= WALLET TOPUP HISTORY =================
+// Returns ALL topup transactions with their actual status
 exports.getWalletTopupHistory = async (userId, page = 1, limit = 20) => {
     const skip = (page - 1) * limit;
 
@@ -461,9 +462,13 @@ exports.confirmTopupFromReturn = async (paymentId, userId) => {
         }
 
         if (!isValid) {
-            await session.abortTransaction();
-            console.error('❌ Payment validation failed - rejecting');
-            return { success: false, message: 'PayFast could not confirm payment' };
+            // Mark as failed instead of leaving as pending
+            payment.status = 'failed';
+            payment.metadata = { ...payment.metadata, failureReason: 'PayFast validation failed' };
+            await payment.save({ session });
+            await session.commitTransaction();
+            console.error('❌ Payment validation failed - marked as failed');
+            return { success: false, message: 'PayFast could not confirm payment', paymentId: payment._id };
         }
 
         console.log(`✅ Payment validation passed\n`);
