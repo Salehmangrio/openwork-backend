@@ -4,7 +4,7 @@
  */
 
 const userService = require('../services/userService');
-const { User, Conversation } = require('../models/index');
+const { User, Conversation, Message } = require('../models/index');
 const { cloudinary } = require('../middleware/upload');
 
 exports.getUser = async (req, res, next) => {
@@ -68,9 +68,6 @@ exports.getConversationClients = async (req, res, next) => {
     const limit = parseInt(req.query.limit) || 100;
 
     console.log(`🔍 [getConversationClients] Fetching all message participants for user: ${userId}`);
-
-    // Get the Message model
-    const Message = require('../models/index').Message;
 
     // Find all conversations where current user is involved
     const conversations = await Conversation.find({ participants: userId }).populate('participants', '_id');
