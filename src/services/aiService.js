@@ -41,7 +41,15 @@ async function callPythonAI(endpoint, payload) {
   catch { throw new Error('AI service returned non-JSON response'); }
 
   if (!response.ok) {
-    const msg = data?.detail || data?.error || data?.message || JSON.stringify(data);
+    let msg;
+    if (Array.isArray(data)) {
+      // Handle FastAPI validation errors (array of error objects)
+      msg = data.map(err =>
+        err.msg || err.message || err.detail || JSON.stringify(err)
+      ).join('; ');
+    } else {
+      msg = data?.detail || data?.error || data?.message || JSON.stringify(data);
+    }
     throw new Error(`AI service error (${response.status}): ${msg}`);
   }
   return data;
@@ -192,22 +200,55 @@ exports.evaluateSkillTest = async (userId, topic, questions) => {
     throw new Error('Topic and questions array are required');
   }
 
-  const result = await callPythonAI('/ai/skill-test/evaluate', {
-    topic: topic,
-    questions: questions,
+  const transformedQuestions = questions.map(q =>
+    typeof q === 'string' ? q : q.question
+  );
+
+  const answers = questions.map(q =>
+    typeof q === 'string' ? '' : (q.user_answer || '')
+  );
+
+  let correct = 0;
+  const results = [];
+
+  // ====================== SIMPLE MCQ SCORING ======================
+  transformedQuestions.forEach((q, index) => {
+    const answer = (answers[index] || "").trim();
+    const correctAnswer =
+      typeof questions[index] === 'string'
+        ? ''
+        : (questions[index].correct_answer || "").trim();
+
+    const isCorrect =
+      answer.toLowerCase() === correctAnswer.toLowerCase();
+
+    if (isCorrect) correct++;
+
+    results.push({
+      question: q,
+      answer: answer,
+      correctAnswer: correctAnswer,
+      score: isCorrect ? 1 : 0
+    });
   });
+
+  const total = transformedQuestions.length;
+
+  const percentage = Math.round((correct / total) * 100);
+  const passed = percentage >= 60;
 
   return {
     success: true,
     result: {
-      passed: result.passed || false,
-      score: result.score || 0,
-      total: result.total || questions.length,
-      percentage: result.percentage || 0,
-      feedback: result.feedback || '',
-      results: result.results || [],
-      aiScoreIncrease: result.aiScoreIncrease || 0,
-    },
+      passed,
+      score: correct,        // ✅ number of correct answers
+      total,                 // total questions
+      percentage,           // optional (for UI only)
+      feedback: passed
+        ? "Great job! You passed the test."
+        : "Keep practicing to improve your score.",
+      results
+    }
   };
 };
 
