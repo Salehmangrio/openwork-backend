@@ -14,6 +14,7 @@ const {
     acceptProposal,
     withdrawProposal,
     rejectProposal,
+    checkUserApplied,
 } = require('../controllers/proposalController');
 
 // =============================================
@@ -39,6 +40,13 @@ router.post(
     handleValidation,        // handles validation errors
     submitProposal
 );
+
+/**
+ * @route   GET /api/proposals/job/:jobId/check
+ * @desc    Check if current user has applied to a job
+ * @access  Private
+ */
+router.get('/job/:jobId/check', protect, checkUserApplied);
 
 /**
  * @route   GET /api/proposals/job/:jobId

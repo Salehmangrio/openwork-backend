@@ -80,7 +80,7 @@ exports.getLearningRecommendations = async (req, res, next) => {
 
 exports.generateSkillTest = async (req, res, next) => {
   try {
-    const { topic, level } = req.query;
+    const { topic, level } = req.body;
     if (!topic) {
       return res.status(400).json({ success: false, message: 'Topic is required' });
     }
@@ -116,10 +116,33 @@ exports.detectFraud = async (req, res, next) => {
 
 exports.getSkillSuggestions = async (req, res, next) => {
   try {
-    const { category, query } = req.query;
+    const { category, query } = req.body;
     const result = await aiService.getSkillSuggestions(category || '', query || '');
     res.json(result);
   } catch (err) {
     next(err);
+  }
+};
+
+exports.moderate = async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ success: false, message: 'Message is required' });
+    }
+    const result = await aiService.moderate(message);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+exports.health = async (req, res) => {
+  try {
+    const result = await aiService.health();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };

@@ -31,6 +31,19 @@ class APIFeatures {
     this.query = this.query.skip((page - 1) * limit).limit(limit);
     return this;
   }
+
+  fields() {
+    if (this.queryString.fields) {
+      const fields = this.queryString.fields.split(',');
+      // Always include proposalCount
+      if (!fields.includes('proposalCount')) {
+        fields.push('proposalCount');
+      }
+      this.query = this.query.select(fields.join(' '));
+    }
+    // If no fields specified, return all fields (including proposalCount by default)
+    return this;
+  }
 }
 
 module.exports = APIFeatures;

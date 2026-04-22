@@ -1,12 +1,9 @@
-const axios = require('axios');
-
-// Configuration for Message Detection AI
-const AI_SERVICE_URL = process.env.MESSAGE_DETECTOR_URL || process.env.MESSAGE_AI_URL || 'http://localhost:7860';
+const aiService = require('./aiService');
 
 /**
  * Call the message detection AI service to analyze message content
  * @param {string} messageContent - The message text to analyze
- * @returns {Promise<{status: string, score: number}>} - Safe/Unsafe status and confidence score
+ * @returns {Promise<{status: string, reason: string}>} - Safe/Unsafe status and reason
  */
 const analyzeMessageContent = async (messageContent) => {
     try {
@@ -15,49 +12,38 @@ const analyzeMessageContent = async (messageContent) => {
             console.log('⏭️  Skipping analysis: message too short');
             return {
                 status: 'safe',
-                score: 0,
+                reason: 'message too short',
             };
         }
 
         console.log(`🔍 Analyzing message for safety...`);
-        console.log(`📤 Calling Hugging Face API: ${MESSAGE_DETECTOR_URL}/predict`);
-        console.log(`📝 Message: "${messageContent.trim().substring(0, 50)}..."`);
+        console.log(` Message: "${messageContent.trim().substring(0, 50)}..."`);
 
-        const response = await axios.post(
-            `${MESSAGE_DETECTOR_URL}/predict`,
-            { text: messageContent.trim() },
-            {
-                timeout: 30000,  // 30 second timeout for HF
-                headers: { 'Content-Type': 'application/json' }
-            }
-        );
+        const result = await aiService.moderate(messageContent.trim());
 
         console.log(`📥 AI Response received:`);
-        console.log(`   Response data:`, JSON.stringify(response.data));
+        console.log(`   Response data:`, JSON.stringify(result));
 
-        // Parse response based on API format
         let status = 'safe';
-        let score = 0;
 
-        if (response.data.prediction) {
-            console.log(`   Prediction: ${response.data.prediction}`);
-            status = response.data.prediction.toLowerCase().includes('safe') ? 'safe' : 'unsafe';
-            score = response.data.score || 0;
+        if (result.verdict === 'UNSAFE') {
+            status = 'unsafe';
+        } else {
+            status = 'safe';
         }
 
-        const result = {
-            status,
-            score,
+        const analysisResult = {
+            status: status,
+            reason: result.reason || 'analysis complete',
         };
 
-        console.log(`✅ Analysis complete: ${result.status} (confidence: ${(result.score * 100).toFixed(1)}%)`);
-        return result;
+        console.log(`✅ Analysis complete: ${analysisResult.status}`);
+        return analysisResult;
 
     } catch (error) {
         console.error('❌ AI Service Error:');
         console.error(`   Message: ${error.message}`);
         console.error(`   Code: ${error.code}`);
-        console.error(`   URL: ${AI_SERVICE_URL}predict`);
         if (error.response?.status) {
             console.error(`   HTTP Status: ${error.response.status}`);
             console.error(`   Response: ${JSON.stringify(error.response.data)}`);
@@ -67,7 +53,7 @@ const analyzeMessageContent = async (messageContent) => {
         console.log('⚠️  Falling back to "pending" status');
         return {
             status: 'pending',
-            score: 0,
+            reason: 'ai service unavailable',
         };
     }
 };
@@ -83,7 +69,9 @@ const analyzeMessageBatch = async (messages) => {
         return await Promise.all(promises);
     } catch (error) {
         console.error('Error in batch analysis:', error.message);
-        return messages.map(() => ({ status: 'pending', score: 0 }));
+        return messages.map(
+            () => ({ status: 'pending', reason: 'ai service unavailable' })
+        );
     }
 };
 

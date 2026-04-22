@@ -39,6 +39,20 @@ exports.submitProposal = async (req, res, next) => {
 };
 
 /**
+ * CHECK IF USER HAS APPLIED TO JOB
+ * @route   GET /api/proposals/job/:jobId/check
+ * @access  Private
+ */
+exports.checkUserApplied = async (req, res, next) => {
+  try {
+    const result = await proposalService.checkUserApplied(req.params.jobId, req.user._id);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * GET JOB PROPOSALS
  * @route   GET /api/jobs/:jobId/proposals
  * @access  Private (Job client)

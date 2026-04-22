@@ -233,15 +233,36 @@ exports.acceptProposal = async (proposalId, userId, ip) => {
 };
 
 /**
+ * CHECK IF USER HAS APPLIED TO JOB
+ */
+exports.checkUserApplied = async (jobId, userId) => {
+  const job = await Job.findById(jobId);
+  if (!job) throw new Error('Job not found');
+
+  const proposal = await Proposal.findOne({ job: jobId, freelancer: userId });
+  return {
+    success: true,
+    hasApplied: !!proposal,
+    proposalId: proposal?._id || null,
+  };
+};
+
+/**
  * GET PROPOSALS WITH PAGINATION
  */
 exports.getJobProposals = async (jobId, userId, page = 1, limit = 15) => {
   const job = await Job.findById(jobId);
-  if (!job) throw new Error('Job not found');
+  if (!job) {
+    const error = new Error('Job not found');
+    error.statusCode = 404;
+    throw error;
+  }
 
   // Verify authorization
   if (job.client.toString() !== userId.toString()) {
-    throw new Error('Not authorized - only job client can view proposals');
+    const error = new Error('Not authorized - only job client can view proposals');
+    error.statusCode = 403;
+    throw error;
   }
 
   const skip = (page - 1) * limit;

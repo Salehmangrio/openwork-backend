@@ -1,8 +1,6 @@
 /**
- * aiService.js - Fixed version
- * Bug Fix #8: this.calculateJobMatch → exports.calculateJobMatch
- * Bug Fix #9: fetch timeout via AbortController
- * Bug Fix #10: URL normalisation centralised
+ * aiService.js - Updated for openwork-ai-service integration
+ * Matches openwork-ai-service API format
  */
 
 const { User, Job } = require('../models/index');
@@ -17,19 +15,19 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
   }
 }
 
-async function callPythonAI(endpoint, payload) {
+async function callAIService(endpoint, payload, method = 'POST') {
   const aiUrl = process.env.PYTHON_AI_SERVICE_URL;
   if (!aiUrl) throw new Error('PYTHON_AI_SERVICE_URL not configured in .env');
 
   const url = `${aiUrl.replace(/\/$/, '')}${endpoint}`;
-  console.log(`🔗 Calling Python AI: ${url}`);
+  console.log(`🔗 Calling AI Service: ${method} ${url}`);
 
   let response;
   try {
     response = await fetchWithTimeout(url, {
-      method: 'POST',
+      method: method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: method === 'POST' ? JSON.stringify(payload) : undefined,
     }, 30000);
   } catch (fetchErr) {
     if (fetchErr.name === 'AbortError') throw new Error('AI service timed out after 30s');
@@ -57,20 +55,21 @@ async function callPythonAI(endpoint, payload) {
 
 exports.generateProposal = async (freelancerId, jobId) => {
   const [freelancer, job] = await Promise.all([
-    User.findById(freelancerId).select('fullName skills experienceLevel aiSkillScore'),
+    User.findById(freelancerId).select('fullName skills experienceLevel aiSkillScore averageRating completedJobs'),
     Job.findById(jobId).select('title description skills budgetMin budgetMax'),
   ]);
   if (!freelancer || !job) throw new Error('Freelancer or job not found');
 
-  const result = await callPythonAI('/ai/generate-proposal', {
-    job_title: job.title,
-    job_description: job.description,
-    required_skills: job.skills || [],
-    budget: { min: job.budgetMin, max: job.budgetMax },
-    freelancer_name: freelancer.fullName,
-    freelancer_skills: freelancer.skills || [],
-    freelancer_experience: freelancer.experienceLevel,
-    freelancer_ai_score: freelancer.aiSkillScore || 0,
+  const result = await callAIService('/ai/generate-proposal', {
+    jobDescription: job.description,
+    freelancerProfile: {
+      fullName: freelancer.fullName,
+      skills: freelancer.skills || [],
+      experienceLevel: freelancer.experienceLevel,
+      aiScore: freelancer.aiSkillScore || 0,
+      rating: freelancer.averageRating || 0,
+      completedJobs: freelancer.completedJobs || 0,
+    },
   });
 
   return {
@@ -87,23 +86,27 @@ exports.generateProposal = async (freelancerId, jobId) => {
 
 exports.calculateJobMatch = async (freelancerId, jobId) => {
   const [freelancer, job] = await Promise.all([
-    User.findById(freelancerId).select('skills experienceLevel averageRating aiSkillScore'),
-    Job.findById(jobId).select('skills experienceLevel category'),
+    User.findById(freelancerId).select('skills experienceLevel averageRating aiSkillScore completedJobs location responseTimeHours'),
+    Job.findById(jobId).select('title description skills experienceLevel category location'),
   ]);
   if (!freelancer || !job) throw new Error('Freelancer or job not found');
 
-  const result = await callPythonAI('/ai/job-match', {
+  const result = await callAIService('/ai/job-match', {
     freelancer: {
       skills: freelancer.skills || [],
-      experience: freelancer.experienceLevel,
-      rating: freelancer.averageRating || 0,
       aiScore: freelancer.aiSkillScore || 0,
+      experience: freelancer.experienceLevel,
+      location: freelancer.location || '',
+      completedJobs: freelancer.completedJobs || 0,
+      rating: freelancer.averageRating || 0,
+      responseTimeHours: freelancer.responseTimeHours || 24,
     },
     jobs: [{
       id: job._id.toString(),
+      title: job.title,
       skills: job.skills || [],
       experienceLevel: job.experienceLevel,
-      category: job.category,
+      location: job.location || '',
     }],
   });
 
@@ -116,7 +119,6 @@ exports.calculateJobMatch = async (freelancerId, jobId) => {
   };
 };
 
-// Bug Fix #8: was `this.calculateJobMatch` - undefined in module scope
 exports.getJobRecommendations = async (freelancerId, limit = 10) => {
   const freelancer = await User.findById(freelancerId).select('skills experienceLevel');
   if (!freelancer) throw new Error('Freelancer not found');
@@ -141,10 +143,8 @@ exports.getJobRecommendations = async (freelancerId, limit = 10) => {
 };
 
 exports.chat = async (messages, context = {}) => {
-  const result = await callPythonAI('/ai/chat', {
+  const result = await callAIService('/ai/chat', {
     messages: messages || [{ role: 'user', content: 'Hello' }],
-    user_role: context.userRole || 'user',
-    user_context: context.userContext || '',
   });
   return { success: true, message: result.message || 'No response', model: result.model || 'OpenRouter-Free' };
 };
@@ -153,13 +153,11 @@ exports.analyzeProfile = async (userId) => {
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  const result = await callPythonAI('/ai/chat', {
+  const result = await callAIService('/ai/chat', {
     messages: [
       { role: 'system', content: 'You are a professional career coach for freelancers.' },
       { role: 'user', content: `Analyze this profile and provide actionable tips: Skills: ${user.skills?.join(', ')}, Experience: ${user.experienceLevel}, AI Score: ${user.aiSkillScore || 0}/100, Rating: ${user.averageRating || 0}/5` }
     ],
-    user_role: 'freelancer',
-    user_context: 'Profile analysis',
   });
   return { success: true, analysis: result.message || 'Unable to analyze profile' };
 };
@@ -168,11 +166,9 @@ exports.getLearningRecommendations = async (userId, targetSkills = []) => {
   const user = await User.findById(userId).select('skills experienceLevel');
   if (!user) throw new Error('User not found');
 
-  const result = await callPythonAI('/ai/skill-suggestions', {
-    current_skills: user.skills || [],
-    target_skills: targetSkills.length > 0 ? targetSkills : ['TypeScript', 'Next.js'],
-    experience_level: user.experienceLevel,
-    platform: 'OpenWork',
+  const result = await callAIService('/ai/skill-suggestions', {
+    category: targetSkills.length > 0 ? targetSkills[0] : 'general',
+    query: targetSkills.length > 0 ? targetSkills.join(', ') : '',
   });
   return { success: true, recommendations: result.suggestions || [] };
 };
@@ -180,10 +176,10 @@ exports.getLearningRecommendations = async (userId, targetSkills = []) => {
 exports.generateSkillTest = async (topic, level = 'easy') => {
   if (!topic) throw new Error('Topic is required');
 
-  const result = await callPythonAI('/ai/skill-test/generate', {
+  const result = await callAIService('/ai/skill-test/generate', {
     topic: topic.toLowerCase().trim(),
     level: level.toLowerCase() || 'easy',
-    total: 5,
+    total: 15,
   });
 
   return {
@@ -211,7 +207,7 @@ exports.evaluateSkillTest = async (userId, topic, questions) => {
   let correct = 0;
   const results = [];
 
-  // ====================== SIMPLE MCQ SCORING ======================
+  // MCQ SCORING
   transformedQuestions.forEach((q, index) => {
     const answer = (answers[index] || "").trim();
     const correctAnswer =
@@ -233,7 +229,6 @@ exports.evaluateSkillTest = async (userId, topic, questions) => {
   });
 
   const total = transformedQuestions.length;
-
   const percentage = Math.round((correct / total) * 100);
   const passed = percentage >= 60;
 
@@ -241,9 +236,9 @@ exports.evaluateSkillTest = async (userId, topic, questions) => {
     success: true,
     result: {
       passed,
-      score: correct,        // ✅ number of correct answers
-      total,                 // total questions
-      percentage,           // optional (for UI only)
+      score: correct,
+      total,
+      percentage,
       feedback: passed
         ? "Great job! You passed the test."
         : "Keep practicing to improve your score.",
@@ -257,7 +252,7 @@ exports.detectFraud = async (loginPatterns = [], bidAmounts = [], responseTimes 
     return { success: true, fraudProbability: 0.0, flags: [] };
   }
 
-  const result = await callPythonAI('/ai/fraud-detect', {
+  const result = await callAIService('/ai/fraud-detect', {
     loginPatterns: loginPatterns,
     bidAmounts: bidAmounts,
     responseTimes: responseTimes,
@@ -272,7 +267,7 @@ exports.detectFraud = async (loginPatterns = [], bidAmounts = [], responseTimes 
 };
 
 exports.getSkillSuggestions = async (category = '', query = '') => {
-  const result = await callPythonAI('/ai/skill-suggestions', {
+  const result = await callAIService('/ai/skill-suggestions', {
     category: category || 'general',
     query: query || '',
   });
@@ -283,3 +278,23 @@ exports.getSkillSuggestions = async (category = '', query = '') => {
     total: (result.suggestions || []).length,
   };
 };
+
+exports.moderate = async (message) => {
+  if (!message) throw new Error('Message is required');
+
+  const result = await callAIService('/ai/moderate', {
+    message: message,
+  });
+
+  return {
+    success: true,
+    verdict: result.verdict || 'SAFE',
+    reason: result.reason || '',
+  };
+};
+
+exports.health = async () => {
+  const result = await callAIService('/ai/health');
+  return { success: true, message: result.message };
+};
+

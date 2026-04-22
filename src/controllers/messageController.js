@@ -48,7 +48,7 @@ exports.getConversations = async (req, res, next) => {
         $match: {
           conversation: { $in: convIds },
           sender: { $ne: req.user._id },
-          readAt: null // Unread messages have null readAt
+          readAt: null
         }
       },
       {
@@ -149,6 +149,8 @@ exports.sendMessage = async (req, res, next) => {
 
     conv.lastMessage = message._id;
     conv.lastActivity = new Date();
+
+
     await conv.save();
 
     await message.populate('sender', 'fullName profileImage');
@@ -170,8 +172,7 @@ exports.sendMessage = async (req, res, next) => {
     // Send response immediately (don't wait for AI analysis)
     res.status(201).json({ success: true, message });
 
-    // === PARALLEL ANALYSIS (non-blocking) ===
-    // Analyze in background and update message status
+    // Parallel analysis (non-blocking)
     analyzeMessageContent(content)
       .then(async (analysis) => {
         try {

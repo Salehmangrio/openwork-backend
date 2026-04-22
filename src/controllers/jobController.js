@@ -18,14 +18,14 @@ exports.createJob = async (req, res, next) => {
 exports.getJobs = async (req, res, next) => {
     try {
         const features = new APIFeatures(Job.find({ status: 'open' }), req.query).filter().sort().paginate();
-        const jobs = await features.query;
+        const jobs = await features.query.lean({ defaults: true });
         res.json({ success: true, count: jobs.length, jobs });
     } catch (err) { next(err); }
 };
 
 exports.getJob = async (req, res, next) => {
     try {
-        const job = await Job.findById(req.params.id).populate('client');
+        const job = await Job.findById(req.params.id).populate('client').lean({ defaults: true });
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
         res.json({ success: true, job });
     } catch (err) { next(err); }
@@ -105,7 +105,7 @@ exports.deleteJob = async (req, res, next) => {
 
 exports.getMyJobs = async (req, res, next) => {
     try {
-        const jobs = await Job.find({ client: req.user._id }).sort('-createdAt');
+        const jobs = await Job.find({ client: req.user._id }).sort('-createdAt').lean({ defaults: true });
         res.json({ success: true, jobs });
     } catch (err) { next(err); }
 };
