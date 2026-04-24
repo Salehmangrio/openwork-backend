@@ -6,7 +6,7 @@ const { Notification } = require('../models/index');
 const { sendEmail } = require('../utils/email');
 const { logActivity } = require('../utils/helpers');
 
-const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
+const { sendVerificationEmail, sendPasswordResetEmail, sendEmailOtp } = require('../services/emailService');
 
 // Firebase Admin SDK initialization
 let admin;
@@ -114,16 +114,18 @@ exports.register = async (req, res, next) => {
       canActAsClient: role === 'client',
     });
 
-    // 1. Generate a secure email verification token
-    const emailToken = crypto.randomBytes(32).toString('hex');
-
-    // 2. Save token + expiry to user
-    user.emailVerifyToken = emailToken;
-    user.emailVerifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    // 1. Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // 2. Hash and save OTP with 10-minute expiry
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    user.emailOtp = hashedOtp;
+    user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    user.emailOtpAttempts = 0;
     await user.save();
 
-    // 3. Send the verification email asynchronously (don't block response)
-    sendVerificationEmail(user.email, user.fullName, emailToken)
+    // 3. Send the OTP email asynchronously (don't block response)
+    sendEmailOtp(user.email, user.fullName, otp)
       .catch(err => console.error('❌ Email send failed during registration:', err.message));
 
     // 4. Create welcome notification
@@ -223,6 +225,114 @@ exports.getMe = async (req, res, next) => {
   }
 };
 
+// ─── @POST /api/auth/verify-email-otp ──────────────────────────
+exports.verifyEmailOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Check if email is already verified
+    if (user.emailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified' });
+    }
+
+    // Check if OTP has expired
+    if (!user.emailOtpExpires || user.emailOtpExpires < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Check attempt limit
+    if (user.emailOtpAttempts >= 5) {
+      return res.status(429).json({ success: false, message: 'Too many failed attempts. Please request a new OTP.' });
+    }
+
+    // Hash the provided OTP and compare
+    const hashedProvidedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+
+    if (hashedProvidedOtp !== user.emailOtp) {
+      user.emailOtpAttempts = (user.emailOtpAttempts || 0) + 1;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please try again.' });
+    }
+
+    // OTP is valid, mark email as verified
+    user.emailVerified = true;
+    user.emailOtp = undefined;
+    user.emailOtpExpires = undefined;
+    user.emailOtpAttempts = 0;
+    await user.save();
+
+    await logActivity(user._id, 'email_verified', 'User', user._id, 'Email verified via OTP', req.ip || '0.0.0.0');
+
+    res.status(200).json({ 
+      success: true, 
+      message: 'Email verified successfully!',
+      user: {
+        _id: user._id,
+        email: user.email,
+        emailVerified: user.emailVerified,
+        fullName: user.fullName,
+        profileImage: user.profileImage
+      }
+    });
+
+  } catch (err) {
+    console.error('Email verification error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// ─── @POST /api/auth/resend-email-otp ──────────────────────────
+exports.resendEmailOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (user.emailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified' });
+    }
+
+    // Generate a new 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash and save new OTP with 10-minute expiry
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    user.emailOtp = hashedOtp;
+    user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.emailOtpAttempts = 0;
+    await user.save();
+
+    // Send OTP email asynchronously
+    sendEmailOtp(user.email, user.fullName, otp)
+      .catch(err => console.error('Failed to send OTP email:', err));
+
+    res.status(200).json({ success: true, message: 'OTP sent to your email' });
+
+  } catch (err) {
+    console.error('Resend OTP error:', err);
+    res.status(500).json({ success: false, message: 'Failed to send OTP' });
+  }
+};
+
 // ─── @GET /api/auth/verify-email/:token ───────────────────────
 exports.verifyEmail = async (req, res) => {
   try {
@@ -249,30 +359,40 @@ exports.verifyEmail = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: 'Server error' });
   }
-}
+};
 
-// POST /api/auth/resend-verification  (in case user needs a new link)
+// POST /api/auth/resend-verification  (resend OTP)
 exports.resendVerification = async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
 
-    if (user.emailVerified) {
-      return res.status(400).json({ message: 'Email is already verified.' });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const emailToken = crypto.randomBytes(32).toString('hex');
-    user.emailVerifyToken = emailToken;
-    user.emailVerifyExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    if (user.emailVerified) {
+      return res.status(400).json({ success: false, message: 'Email is already verified.' });
+    }
+
+    // Generate a new 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash and save new OTP with 10-minute expiry
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    user.emailOtp = hashedOtp;
+    user.emailOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
+    user.emailOtpAttempts = 0;
     await user.save();
 
-    // Send email asynchronously without blocking response
-    sendVerificationEmail(user.email, user.fullName, emailToken)
-      .catch(err => console.error('Failed to send verification email:', err));
+    // Send OTP email asynchronously without blocking response
+    sendEmailOtp(user.email, user.fullName, otp)
+      .catch(err => console.error('Failed to send verification OTP:', err));
 
-    res.json({ message: 'Verification email sent!' });
+    res.status(200).json({ success: true, message: 'OTP sent to your email!' });
 
   } catch (err) {
-    res.status(500).json({ message: 'Failed to send email' });
+    console.error('Resend verification error:', err);
+    res.status(500).json({ success: false, message: 'Failed to send OTP' });
   }
 };
 

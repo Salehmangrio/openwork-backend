@@ -38,20 +38,20 @@ exports.getClients = async (req, res, next) => {
   try {
     const search = req.query.search || '';
     const limit = parseInt(req.query.limit) || 10;
-    
+
     const query = { role: 'client' };
-    
+
     if (search) {
       query.$or = [
         { fullName: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const users = await User.find(query)
       .select('_id fullName email profileImage')
       .limit(limit);
-    
+
     res.json({
       success: true,
       users
@@ -83,7 +83,7 @@ exports.getConversationClients = async (req, res, next) => {
 
     // Extract all unique participants from conversations (everyone in those conversations except current user)
     const clientIds = new Set();
-    
+
     conversations.forEach(conv => {
       console.log(`📌 [getConversationClients] Processing conversation with participants:`, conv.participants);
       conv.participants?.forEach(participant => {
@@ -256,6 +256,36 @@ exports.deleteProfileImage = async (req, res, next) => {
       success: true,
       message: 'Profile image deleted successfully',
       user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateRoleSwitch = async (req, res, next) => {
+  try {
+    const result = await userService.updateRoleSwitch(req.user._id);
+
+    res.status(200).json({
+      success: true,
+      message: `Role switched successfully to ${result.role}`,
+      role: result.role,
+      user: result.user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.toggleDualRole = async (req, res, next) => {
+  try {
+    const { canActAsFreelancer } = req.body;
+    const result = await userService.toggleDualRole(req.user._id, canActAsFreelancer);
+
+    res.status(200).json({
+      success: true,
+      message: result.message,
+      user: result.user,
     });
   } catch (err) {
     next(err);

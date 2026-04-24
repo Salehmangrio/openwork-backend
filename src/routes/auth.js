@@ -11,6 +11,8 @@ const {
   login,
   getMe,
   verifyEmail,
+  verifyEmailOtp,
+  resendEmailOtp,
   forgotPassword,
   resetPassword,
   updatePassword,
@@ -30,13 +32,23 @@ router.post('/google-complete', authLimiter, googleComplete);
 router.post('/firebase-register', authLimiter, firebaseRegister); // Register via Firebase
 router.post('/firebase-login', firebaseAuth); // Login via Firebase
 router.get('/me', protect, getMe);
-// router.get('/verify-email/:token', verifyEmail);
+
+// Email verification routes (OTP-based)
+router.post('/verify-email-otp', authLimiter, verifyEmailOtp);
+router.post('/resend-email-otp', authLimiter, resendEmailOtp);
+
+// Legacy token-based route (kept for backward compatibility)
+router.get('/verify-email/:token', verifyEmail);
+
+// Password reset routes
 router.post('/forgot-password', forgotPassword);
 router.put('/reset-password/:token', resetPassword);
 router.put('/update-password', protect, updatePassword);
+
+// Logout
 router.post('/logout', protect, logout);
-// GET /api/auth/verify-email/:token
-router.get('/verify-email/:token',verifyEmail);
+
+// Resend verification (OTP)
 router.post('/resend-verification', protect, resendVerification);
 
 module.exports = router;

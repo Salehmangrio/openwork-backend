@@ -20,8 +20,8 @@ app.set('trust proxy', 1);
 // ─── Socket.io Setup ─────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: "https://openworkfyp.netlify.app" || "http://localhost:3000",
-    methods: ['GET', 'POST'],
+    origin: "http://localhost:3000",
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
   },
   allowEIO3: true,
@@ -79,7 +79,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── CORS ────────────────────────────────────────────────────
 app.use(cors({
-  origin: "https://openworkfyp.netlify.app" || "http://localhost:3000",
+  origin: "http://localhost:3000",
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],

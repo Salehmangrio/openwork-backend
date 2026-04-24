@@ -73,6 +73,7 @@ const UserSchema = new mongoose.Schema(
       default: '',
     },
     totalSpent: { type: Number, default: 0 }, budgetAllocated: { type: Number, default: 0 },
+    
     // ── AI Scores & Analytics ────────────────────────────────
     aiSkillScore: { type: Number, default: 0, min: 0, max: 100 },
     aiRankScore: { type: Number, default: 0 },
@@ -120,10 +121,15 @@ const UserSchema = new mongoose.Schema(
       }
     ],
 
-    // In your User.js schema, add:
+    // ── Email Verification ──────────────────────────────────
     emailVerified: { type: Boolean, default: false },
+    emailOtp: { type: String, select: false },        // stores hashed OTP
+    emailOtpExpires: { type: Date },
+    emailOtpAttempts: { type: Number, default: 0 },
     emailVerifyToken: { type: String },
     emailVerifyExpires: { type: Date },
+    
+    // ── Phone Verification ──────────────────────────────────
     phoneVerified: { type: Boolean, default: false },
     phone: { type: String },
     phoneOtp: { type: String },        // stores hashed OTP

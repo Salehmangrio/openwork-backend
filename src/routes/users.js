@@ -1,17 +1,31 @@
-// routes/users.js
 const express = require('express');
-const r = express.Router();
 const { protect } = require('../middleware/auth');
-const { getUser, getFreelancers, getClients, getConversationClients, updateProfile, getDashboardStats, uploadProfileImage, deleteProfileImage } = require('../controllers/userController');
+const { getUser,
+    getFreelancers,
+    getClients,
+    getConversationClients,
+    updateProfile,
+    getDashboardStats,
+    uploadProfileImage,
+    deleteProfileImage,
+    updateRoleSwitch,
+    toggleDualRole
+} = require('../controllers/userController');
 const { uploadProfileImage: uploadMiddleware } = require('../middleware/upload');
-// Specific routes MUST come before /:id
-r.get('/freelancers', getFreelancers);
-r.get('/clients', protect, getClients);
-r.get('/conversation-clients', protect, getConversationClients);
-r.get('/dashboard/stats', protect, getDashboardStats);
-r.put('/profile', protect, updateProfile);
-r.post('/upload/profile-image', protect, uploadMiddleware, uploadProfileImage);
-r.delete('/upload/profile-image', protect, deleteProfileImage);
-// Generic route AFTER specific ones
-r.get('/:id', getUser);
-module.exports = r;
+const router = express.Router();
+
+
+
+router.get('/freelancers', getFreelancers);
+router.get('/clients', protect, getClients);
+router.get('/conversation-clients', protect, getConversationClients);
+router.get('/dashboard/stats', protect, getDashboardStats);
+router.put('/profile', protect, updateProfile);
+router.post('/upload/profile-image', protect, uploadMiddleware, uploadProfileImage);
+router.delete('/upload/profile-image', protect, deleteProfileImage);
+router.put('/role-switch', protect, updateRoleSwitch);
+router.put('/toggle-dual-role', protect, toggleDualRole);
+router.get('/:id', getUser);
+
+
+module.exports = router;

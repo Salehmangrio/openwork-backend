@@ -1,5 +1,5 @@
 const express = require('express');
-const r = express.Router();
+const router = express.Router();
 const { protect } = require('../middleware/auth');
 const { uploadAvatar, uploadOfferThumbnail, cloudinary } = require('../middleware/upload');
 const multer = require('multer');
@@ -21,7 +21,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // Avatar upload using Cloudinary
-r.post('/avatar', protect, uploadAvatar, async (req, res) => {
+router.post('/avatar', protect, uploadAvatar, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -33,7 +33,7 @@ r.post('/avatar', protect, uploadAvatar, async (req, res) => {
 });
 
 // Offer thumbnail upload using Cloudinary
-r.post('/offer-thumbnail', protect, uploadOfferThumbnail, async (req, res) => {
+router.post('/offer-thumbnail', protect, uploadOfferThumbnail, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
@@ -45,9 +45,9 @@ r.post('/offer-thumbnail', protect, uploadOfferThumbnail, async (req, res) => {
 });
 
 // Files upload using local storage
-r.post('/files', protect, upload.array('files', 5), (req, res) => {
+router.post('/files', protect, upload.array('files', 5), (req, res) => {
   const files = req.files.map(f => ({ url: `/uploads/${f.filename}`, name: f.originalname }));
   res.json({ success: true, files });
 });
 
-module.exports = r;
+module.exports = router;

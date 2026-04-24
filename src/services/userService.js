@@ -301,3 +301,78 @@ exports.getDashboardStats = async (userId) => {
     throw new Error(`Failed to fetch dashboard stats: ${error.message}`);
   }
 };
+
+
+exports.updateRoleSwitch = async (userId) => {
+  try {
+    const currentUser = await User.findById(userId).select('-password');
+
+    if (!currentUser) {
+      throw new Error('User not found');
+    }
+
+    if (currentUser.role === 'admin') {
+      throw new Error('Admin role cannot be switched');
+    }
+
+    const canSwitch =
+      currentUser.canActAsClient && currentUser.canActAsFreelancer;
+
+    if (!canSwitch) {
+      throw new Error('Role switching is only available for dual-role users');
+    }
+
+    currentUser.role =
+      currentUser.role === 'freelancer' ? 'client' : 'freelancer';
+
+    await currentUser.save();
+
+    return {
+      success: true,
+      role: currentUser.role,
+      user: currentUser,
+    };
+  } catch (error) {
+    throw new Error(`Failed to switch role: ${error.message}`);
+  }
+};
+
+exports.toggleDualRole = async (userId, canActAsFreelancer) => {
+  try {
+    const user = await User.findById(userId).select('-password');
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.role === 'admin') {
+      throw new Error('Admin users cannot change role capabilities');
+    }
+
+    // If toggling off dual-role, ensure user has a primary role
+    if (!canActAsFreelancer && !user.canActAsClient) {
+      throw new Error('User must have at least one role enabled');
+    }
+
+    // Update the capability flags
+    user.canActAsFreelancer = canActAsFreelancer;
+    if (!canActAsFreelancer) {
+      user.canActAsClient = true; // Ensure they can act as client if not freelancer
+    } else {
+      user.canActAsClient = true; // Enable both roles
+    }
+
+    await user.save();
+
+    return {
+      success: true,
+      message: canActAsFreelancer 
+        ? 'Dual role enabled! You can now work as both freelancer and client.'
+        : 'Dual role disabled. You are now a client only.',
+      user: user,
+    };
+  } catch (error) {
+    throw new Error(`Failed to toggle dual role: ${error.message}`);
+  }
+};
+

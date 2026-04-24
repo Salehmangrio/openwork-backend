@@ -98,3 +98,60 @@ exports.sendPasswordResetEmail = async (toEmail, fullName, token) => {
     `
   });
 };
+
+// ─── Email OTP Verification ───────────────────────────────────────────────────
+exports.sendEmailOtp = async (toEmail, fullName, otp) => {
+  await resend.emails.send({
+    from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
+    to: toEmail,
+    subject: '🔐 Your OpenWork Email Verification Code',
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head><meta charset="UTF-8"></head>
+      <body style="margin:0;padding:0;background:#0f0e1a;font-family:'Segoe UI',sans-serif;">
+        <div style="max-width:520px;margin:40px auto;background:#1a1927;border-radius:16px;border:1px solid #2a2940;overflow:hidden;">
+          
+          <!-- Header -->
+          <div style="background:linear-gradient(135deg,#6C4EF6,#4f35d4);padding:32px;text-align:center;">
+            <h1 style="color:#fff;margin:0;font-size:24px;font-weight:800;">OpenWork</h1>
+            <p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:14px;">Freelance Marketplace</p>
+          </div>
+
+          <!-- Body -->
+          <div style="padding:32px;">
+            <h2 style="color:#fff;font-size:20px;margin:0 0 12px;">Hi ${fullName}! 👋</h2>
+            <p style="color:#9896B4;font-size:15px;line-height:1.6;margin:0 0 24px;">
+              Welcome to OpenWork! Here's your verification code to activate your account.
+            </p>
+
+            <!-- OTP Box -->
+            <div style="background:#2a2940;border:2px dashed #6C4EF6;border-radius:12px;padding:24px;text-align:center;margin:32px 0;">
+              <p style="color:#6b6984;font-size:13px;margin:0 0 12px;">Your verification code:</p>
+              <p style="color:#6C4EF6;font-size:36px;font-weight:900;letter-spacing:8px;margin:0;font-family:'Courier New',monospace;">
+                ${otp}
+              </p>
+              <p style="color:#6b6984;font-size:12px;margin:12px 0 0;">Valid for 10 minutes</p>
+            </div>
+
+            <p style="color:#9896B4;font-size:14px;line-height:1.6;margin:0 0 12px;">
+              Enter this code on the verification page. <strong>Do not share this code</strong> with anyone.
+            </p>
+
+            <p style="color:#6b6984;font-size:13px;margin:24px 0 0;">
+              If you didn't request this, ignore this email.
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:20px 32px;border-top:1px solid #2a2940;text-align:center;">
+            <p style="color:#6b6984;font-size:12px;margin:0;">
+              © ${new Date().getFullYear()} OpenWork · You're receiving this because you signed up
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `
+  });
+};
