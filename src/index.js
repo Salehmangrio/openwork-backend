@@ -17,10 +17,18 @@ const app = express();
 const server = http.createServer(app);
 app.set('trust proxy', 1);
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://openworkfyp.netlify.app',
+  'https://www.openworkfyp.com',
+  'https://openworkfyp.me',
+  '*'
+];
+
 // ─── Socket.io Setup ─────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
   },
@@ -79,7 +87,14 @@ if (process.env.NODE_ENV === 'production') {
 
 // ─── CORS ────────────────────────────────────────────────────
 app.use(cors({
-  origin: "http://localhost:3000",
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+app.options('*', cors({
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
