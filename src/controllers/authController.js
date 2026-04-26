@@ -234,8 +234,8 @@ exports.verifyEmailOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
 
-    // Find user by email
-    const user = await User.findOne({ email: email.toLowerCase() });
+    // Find user by email and explicitly select emailOtp (it has select: false in schema)
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+emailOtp');
 
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
@@ -270,6 +270,7 @@ exports.verifyEmailOtp = async (req, res) => {
     user.emailOtp = undefined;
     user.emailOtpExpires = undefined;
     user.emailOtpAttempts = 0;
+    user.isVerified = true;
     await user.save();
 
     await logActivity(user._id, 'email_verified', 'User', user._id, 'Email verified via OTP', req.ip || '0.0.0.0');
