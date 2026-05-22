@@ -8,6 +8,7 @@ const { User } = require('../models/index');
 const { logActivity, sendNotification } = require('../utils/helpers');
 
 const PYTHON_SERVICE_URL = process.env.PYTHON_SKILL_TESTING_SERVICE_URL;
+const SKILL_TEST_TIMEOUT_MS = parseInt(process.env.AI_SERVICE_TIMEOUT || '150000'); // Use same timeout as AI service
 
 /**
  * Generate skill test questions from Python AI service
@@ -36,7 +37,7 @@ exports.generateSkillTest = async (topic, level = 'easy') => {
         level: level.toLowerCase(),
         total: 5,
       }),
-      timeout: 30000,
+      timeout: SKILL_TEST_TIMEOUT_MS,
     });
 
     if (!response.ok) {
