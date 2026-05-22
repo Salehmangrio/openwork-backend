@@ -15,11 +15,28 @@ const { User, Job } = require('../models/index');
 
 // Configuration from environment or defaults
 const AI_URL = process.env.PYTHON_AI_SERVICE_URL;
-const AI_TIMEOUT_MS = parseInt(process.env.AI_SERVICE_TIMEOUT || '150000'); // 150 seconds
-const MAX_RETRIES = parseInt(process.env.AI_SERVICE_MAX_RETRIES || '3');
 
-if (!AI_URL) {
-  console.warn('⚠️  PYTHON_AI_SERVICE_URL not configured - AI service will not work');
+// Parse timeout with robust validation
+let AI_TIMEOUT_MS = 150000; // Default: 150 seconds
+const RAW_TIMEOUT = process.env.AI_SERVICE_TIMEOUT;
+if (RAW_TIMEOUT) {
+  const parsed = parseInt(RAW_TIMEOUT, 10);
+  if (!isNaN(parsed) && parsed >= 1000) {
+    AI_TIMEOUT_MS = parsed;
+  } else {
+    console.warn(`⚠️  Invalid AI_SERVICE_TIMEOUT="${RAW_TIMEOUT}", using default 150000ms`);
+  }
+}
+
+const MAX_RETRIES = parseInt(process.env.AI_SERVICE_MAX_RETRIES || '3', 10);
+
+// ✅ Log configuration on startup
+console.log('🚀 AI Service Configuration at startup:');
+console.log(`   AI_URL: ${AI_URL || '❌ NOT SET - using fallbacks'}`);
+console.log(`   Timeout: ${AI_TIMEOUT_MS}ms (${(AI_TIMEOUT_MS / 1000).toFixed(1)}s)`);
+console.log(`   Max Retries: ${MAX_RETRIES}`);
+if (RAW_TIMEOUT) {
+  console.log(`   (Read from env: AI_SERVICE_TIMEOUT=${RAW_TIMEOUT})`);
 }
 
 // Create axios client with retry logic
@@ -96,6 +113,12 @@ async function callAIService(endpoint, payload, method = 'POST') {
   
   try {
     console.log(`📡 [${requestId}] AI Request: ${method} ${endpoint}`);
+    console.log(`   Calling: ${AI_URL || 'FALLBACK MODE'} (timeout: ${AI_TIMEOUT_MS}ms)`);
+    
+    // If AI_URL is not configured, throw error to trigger fallback
+    if (!AI_URL) {
+      throw new Error('AI_SERVICE_URL not configured - using fallback response');
+    }
     
     let response;
     if (method === 'POST') {
@@ -114,22 +137,24 @@ async function callAIService(endpoint, payload, method = 'POST') {
   } catch (error) {
     const duration = Date.now() - startTime;
     
-    // Log error details
-    console.error(`❌ [${requestId}] Failed (${duration}ms)`);
+    // Log error details with timeout info
+    console.error(`❌ [${requestId}] Failed after ${duration}ms (timeout: ${AI_TIMEOUT_MS}ms)`);
     console.error(`   Endpoint: ${endpoint}`);
-    console.error(`   Error Type: ${error.code || error.name}`);
-    console.error(`   Error Message: ${error.message}`);
+    console.error(`   Error: ${error.code || error.name} - ${error.message}`);
     
     if (error.response) {
-      console.error(`   Status: ${error.response.status}`);
-      console.error(`   Response: ${JSON.stringify(error.response.data).substring(0, 200)}`);
+      console.error(`   HTTP Status: ${error.response.status}`);
+    } else if (error.request) {
+      console.error(`   No response received - possible network/timeout issue`);
     }
     
     // Categorize error for better messaging
     if (error.code === 'ECONNABORTED') {
-      throw new Error(`Request timed out after ${duration}ms. AI service may be slow.`);
+      throw new Error(`Request timed out after ${duration}ms (configured timeout: ${AI_TIMEOUT_MS}ms). AI service may be slow.`);
     } else if (error.code === 'ECONNREFUSED') {
       throw new Error(`Cannot connect to AI service. Service may be down.`);
+    } else if (error.code === 'ENOTFOUND') {
+      throw new Error(`AI service hostname not found: ${AI_URL}`);
     } else if (error.response?.status >= 500) {
       throw new Error(`AI service error (${error.response.status}): Server error`);
     } else if (error.response?.status >= 400) {
