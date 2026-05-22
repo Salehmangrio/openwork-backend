@@ -173,10 +173,17 @@ const connectDB = async () => {
 
 // ─── Start Server ─────────────────────────────────────────────
 const PORT = process.env.PORT || 5000;
+const SERVER_TIMEOUT_MS = 180000; // 3 minutes - allows 150s AI requests + overhead
+
 connectDB().then(() => {
   server.listen(PORT, () => {
     console.log(`🚀 OpenWork server running on port ${PORT} [${process.env.NODE_ENV}]`);
+    console.log(`⏱️  Server request timeout: ${SERVER_TIMEOUT_MS}ms (${(SERVER_TIMEOUT_MS / 1000).toFixed(0)}s)`);
   });
+  
+  // Set server timeout to allow long-running AI requests
+  server.setTimeout(SERVER_TIMEOUT_MS);
+  server.keepAliveTimeout = SERVER_TIMEOUT_MS + 1000; // Keep-alive should be slightly longer
 });
 
 module.exports = { app, io };
